@@ -9,18 +9,24 @@ const openai = new OpenAI({
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('API route called')
+    
     const formData = await request.formData()
     const file = formData.get('resume') as File
 
     if (!file) {
+      console.log('No file provided')
       return NextResponse.json(
         { success: false, error: 'No file provided' },
         { status: 400 }
       )
     }
 
+    console.log('File received:', file.name, file.size, file.type)
+
     // Validate file type
     if (file.type !== 'application/pdf') {
+      console.log('Invalid file type:', file.type)
       return NextResponse.json(
         { success: false, error: 'Only PDF files are supported' },
         { status: 400 }
@@ -30,17 +36,31 @@ export async function POST(request: NextRequest) {
     // Convert file to buffer
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
+    console.log('File converted to buffer, size:', buffer.length)
 
     // Parse PDF content
     const pdfData = await pdf(buffer)
     const resumeText = pdfData.text
+    console.log('PDF parsed, text length:', resumeText.length)
 
     if (!resumeText || resumeText.trim().length === 0) {
+      console.log('No text extracted from PDF')
       return NextResponse.json(
         { success: false, error: 'Could not extract text from PDF' },
         { status: 400 }
       )
     }
+
+    // Check if OpenAI API key is configured
+    if (!process.env.OPENAI_API_KEY) {
+      console.log('OpenAI API key not configured')
+      return NextResponse.json(
+        { success: false, error: 'OpenAI API key not configured' },
+        { status: 500 }
+      )
+    }
+
+    console.log('Calling OpenAI API...')
 
     // Use OpenAI to extract information
     const prompt = `
@@ -86,6 +106,7 @@ export async function POST(request: NextRequest) {
     })
 
     const responseText = completion.choices[0]?.message?.content
+    console.log('OpenAI response received:', responseText?.substring(0, 100))
 
     if (!responseText) {
       throw new Error('No response from OpenAI')
@@ -98,6 +119,7 @@ export async function POST(request: NextRequest) {
       const jsonMatch = responseText.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
         parsedData = JSON.parse(jsonMatch[0])
+        console.log('Parsed data:', parsedData)
       } else {
         throw new Error('No JSON found in response')
       }
@@ -126,6 +148,7 @@ export async function POST(request: NextRequest) {
       category: skill.category || 'Technology'
     }))
 
+    console.log('Returning successful response')
     return NextResponse.json({
       success: true,
       data: {
